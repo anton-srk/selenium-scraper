@@ -17,6 +17,8 @@ SECTION_XPATH = '//a[starts-with(@class, "section-link")]'
 PAGE_XPATH = '//a[starts-with(@class, "page-item")]'
 CONTENT_XPATH = '//div[starts-with(@class, "step__viewer")]'
 
+IMG_PATTERN = re.compile(r'<\s*img [^>]*src="([^"]+)')
+
 
 class CourseScraper:
     def __init__(self, cookies: str = COOKIES_PATH, url: str = URL_TO_SCRAPE):
@@ -122,9 +124,23 @@ class CourseScraper:
         ele = self.driver.find_element(by=By.XPATH, value=CONTENT_XPATH)
         path_to_save = os.path.join(title_name, section_name)
         source_code = ele.get_attribute('innerHTML')
+        self._get_images(source_code, path_to_save)
+        source_code = re.sub(IMG_PATTERN, lambda x: self._fix_str(x.group(0)), source_code)
         with open(os.path.join(path_to_save, f'page_{page_number}.html'), 'w') as f:
             f.write(source_code)
-        self._get_images(source_code, path_to_save)
+
+    @staticmethod
+    def _fix_str(in_string: str) -> str:
+        """
+        Auxiliary method to substitute links to local filenames in HTML
+        :param in_string: html code
+        :return: html code with fixed links
+        """
+        fixed_string = (
+            in_string.split('src=')[0] + 'src="'
+            + '_'.join(in_string.split('src=')[-1].split('/')[-2:])
+        )
+        return fixed_string
 
     @staticmethod
     def _get_images(html: str, path: str) -> None:
@@ -133,11 +149,10 @@ class CourseScraper:
         :param html: raw html code as a string
         :param path: path to save data
         """
-        img_pattern = re.compile(r'<\s*img [^>]*src="([^"]+)')
-        images = img_pattern.findall(html)
+        images = IMG_PATTERN.findall(html)
         for image in images:
             img_data = requests.get(image).content
-            file_name = image.split('/')[-1]
+            file_name = '_'.join(image.split('/')[-2:])
             with open(os.path.join(path, f'{file_name}'), 'wb') as handler:
                 handler.write(img_data)
 
